@@ -20,17 +20,84 @@ st.write(
 
 summary = st.text_input("Titel des Termins", value="Praxis ")
 
+# -------------------------------------------------
+# Standard-Datumswerte
+# -------------------------------------------------
+
+heute = datetime.today()
+
+if heute.month == 12:
+    next_month = 1
+    next_year = heute.year + 1
+else:
+    next_month = heute.month + 1
+    next_year = heute.year
+
+# Erster Tag des Folgemonats
+first_day_next_month = datetime(
+    next_year,
+    next_month,
+    1
+).date()
+
+# Sechs Monate später
+end_month = next_month + 5
+end_year = next_year
+
+while end_month > 12:
+    end_month -= 12
+    end_year += 1
+
+# Letzter Tag des Zielmonats
+if end_month == 12:
+    next_calc_month = 1
+    next_calc_year = end_year + 1
+else:
+    next_calc_month = end_month + 1
+    next_calc_year = end_year
+
+last_day_target_month = (
+    datetime(next_calc_year, next_calc_month, 1)
+    - timedelta(days=1)
+).date()
+
+
 col1, col2 = st.columns(2)
 
 with col1:
     start_date = st.date_input(
         "Startdatum",
+        value=first_day_next_month,
         format="DD.MM.YYYY"
     )
 
 with col2:
+
+    # Automatischer Abstand: Ende = letzter Tag des Monats
+    # fünf Monate nach dem Startdatum
+
+    auto_end_month = start_date.month + 5
+    auto_end_year = start_date.year
+
+    while auto_end_month > 12:
+        auto_end_month -= 12
+        auto_end_year += 1
+
+    if auto_end_month == 12:
+        next_month_calc = 1
+        next_year_calc = auto_end_year + 1
+    else:
+        next_month_calc = auto_end_month + 1
+        next_year_calc = auto_end_year
+
+    auto_end_date = (
+        datetime(next_year_calc, next_month_calc, 1)
+        - timedelta(days=1)
+    ).date()
+
     end_date = st.date_input(
         "Enddatum",
+        value=auto_end_date,
         format="DD.MM.YYYY"
     )
 
@@ -43,10 +110,31 @@ with col3:
     )
 
 with col4:
+
+    default_end_datetime = datetime.combine(
+        datetime.today(),
+        start_time
+    ) + timedelta(hours=1)
+
+    default_end_time = default_end_datetime.time()
+
     end_time = st.time_input(
         "Endzeit",
-        value=time(9, 0)
+        value=default_end_time
     )
+
+
+# -------------------------------------------------
+# Wochenintervall
+# -------------------------------------------------
+
+wochen_intervall = st.selectbox(
+    "Terminrhythmus",
+    options=[1, 2, 3, 4],
+    format_func=lambda x: (
+        "Jede Woche" if x == 1 else f"Alle {x} Wochen"
+    )
+)
 
 
 # -------------------------------------------------
@@ -55,24 +143,29 @@ with col4:
 
 st.subheader("Wochentage auswählen")
 
-weekday_options = {
-    "Montag": 0,
-    "Dienstag": 1,
-    "Mittwoch": 2,
-    "Donnerstag": 3,
-    "Freitag": 4,
-    "Samstag": 5,
-    "Sonntag": 6,
-}
+weekday_options = [
+    ("Montag", 0),
+    ("Dienstag", 1),
+    ("Mittwoch", 2),
+    ("Donnerstag", 3),
+    ("Freitag", 4),
+    ("Samstag", 5),
+    ("Sonntag", 6),
+]
 
 selected_days = []
 
-cols = st.columns(4)
+for day, number in weekday_options:
 
-for index, (day, number) in enumerate(weekday_options.items()):
-    with cols[index % 4]:
-        if st.checkbox(day):
-            selected_days.append(number)
+    default_value = day in [
+        "Montag",
+        "Dienstag",
+        "Mittwoch",
+        "Donnerstag"
+    ]
+
+    if st.checkbox(day, value=default_value):
+        selected_days.append(number)
 
 
 # -------------------------------------------------
@@ -98,7 +191,19 @@ if st.button("ICS-Datei erzeugen"):
 
         while current_date <= end_date:
 
-            if current_date.weekday() in selected_days:
+            # Anzahl Wochen seit Startdatum
+            wochen_diff = (
+                (current_date - start_date).days // 7
+            )
+
+            intervall_passend = (
+                wochen_diff % wochen_intervall == 0
+            )
+
+            if (
+                current_date.weekday() in selected_days
+                and intervall_passend
+            ):
 
                 start_datetime = datetime.combine(
                     current_date,
